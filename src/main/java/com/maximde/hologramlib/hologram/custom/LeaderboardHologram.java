@@ -14,6 +14,7 @@ import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.jetbrains.annotations.ApiStatus;
+import studio.o7.megalodon.localization.Translation;
 
 import java.text.NumberFormat;
 import java.util.*;
@@ -639,6 +640,7 @@ public class LeaderboardHologram {
         ASCENDING
     }
 
+
     /**
      * Configuration options for customizing the leaderboard display.
      * Use the builder pattern to create instances.
@@ -763,5 +765,31 @@ public class LeaderboardHologram {
          */
         @Builder.Default @ApiStatus.Experimental
         private int dottedLayoutAdditionalDots = 10;
+
+        public static class LeaderboardOptionsBuilder {
+            public LeaderboardOptionsBuilder titleTranslationKey(String key) {
+                return this.title("<lang:" + key + ">");
+            }
+
+            public LeaderboardOptionsBuilder defaultPlaceFormatTranslationKey(String key) {
+                return this.defaultPlaceFormat("<lang:" + key + ">");
+            }
+
+            public LeaderboardOptionsBuilder footerTranslationKey(String key) {
+                return this.footerFormat("<lang:" + key + ">");
+            }
+
+            public LeaderboardOptionsBuilder titleTranslation(Translation translation) {
+                return this.title("<lang:" + translation.key().value() + ">");
+            }
+
+            public LeaderboardOptionsBuilder defaultPlaceFormatTranslation(Translation translation) {
+                return this.defaultPlaceFormat("<lang:" + translation.key().value() + ">");
+            }
+
+            public LeaderboardOptionsBuilder footerTranslation(Translation translation) {
+                return this.footerFormat("<lang:" + translation.key().value() + ">");
+            }
+        }
     }
 }

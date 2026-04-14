@@ -9,8 +9,10 @@ import com.maximde.hologramlib.hologram.HologramManager;
 import com.maximde.hologramlib.hologram.PassengerManager;
 import com.maximde.hologramlib.hook.BedrockPlayerHeadFilter;
 import com.maximde.hologramlib.hook.HeadDatabaseHook;
+import com.maximde.hologramlib.hook.MegalodonIntegration;
 import com.maximde.hologramlib.hook.PlaceholderAPIHook;
 import com.maximde.hologramlib.listener.InteractionPacketListener;
+import com.maximde.hologramlib.listener.MegalodonTranslationListener;
 import com.maximde.hologramlib.listener.PlayerJoinListener;
 import com.maximde.hologramlib.listener.PlayerQuitListener;
 import com.maximde.hologramlib.utils.BukkitTasks;
@@ -30,8 +32,10 @@ import org.bukkit.command.CommandMap;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import studio.o7.megalodon.Megalodon;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.logging.Level;
 
@@ -140,6 +144,23 @@ public abstract class HologramLib {
                 new PlaceholderAPIHook(PacketEvents.getAPI());
             } else {
                 plugin.getLogger().log(Level.INFO, "PlaceholderAPI not found or not enabled. PlaceholderAPI support will be disabled.");
+            }
+
+            Plugin megalodonPlugin = pluginManager.getPlugin("Megalodon");
+            if (megalodonPlugin != null && megalodonPlugin.isEnabled()) {
+                try {
+                    Class<?> clazz = Class.forName("studio.o7.megalodon.Megalodon");
+                    Method getInstance = clazz.getMethod("getInstance");
+                    Object instance = getInstance.invoke(null);
+                    MegalodonIntegration.setMegalodon((Megalodon) instance);
+
+                    PacketEvents.getAPI().getEventManager().registerListener(
+                            new MegalodonTranslationListener(), PacketListenerPriority.HIGH
+                    );
+                    plugin.getLogger().info("Megalodon found – translation support enabled.");
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to hook into Megalodon: " + e.getMessage());
+                }
             }
 
             plugin.getLogger().log(Level.INFO, "Initializing Bedrock player head filter...");

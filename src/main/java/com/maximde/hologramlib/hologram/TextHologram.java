@@ -3,6 +3,7 @@ package com.maximde.hologramlib.hologram;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
 import com.github.retrooper.packetevents.util.Quaternion4f;
 import com.maximde.hologramlib.HologramLib;
+import com.maximde.hologramlib.hook.MegalodonIntegration;
 import com.maximde.hologramlib.utils.MiniMessage;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,17 +13,25 @@ import me.tofaa.entitylib.meta.display.AbstractDisplayMeta;
 import me.tofaa.entitylib.meta.display.TextDisplayMeta;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.joml.Vector3f;
+import studio.o7.megalodon.localization.Translation;
+import studio.o7.megalodon.player.GamePlayer;
 
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public class TextHologram extends Hologram<TextHologram> {
 
     public static final int TEXT_DISPLAY_META_INDEX = 15; // Index for the text component in TextDisplayMeta
+
+    @Getter
+    private Function<Player, Component> perPlayerTextProvider = null;
 
     @Getter
     protected String rawText = "";
@@ -127,8 +136,12 @@ public class TextHologram extends Hologram<TextHologram> {
     protected EntityMeta applyMeta() {
         TextDisplayMeta meta = (TextDisplayMeta) super.entity.getEntityMeta();
 
-        // Set the text, if PlaceholderAPI is enabled, we'll handle it per-player in the hook
-        meta.setText(this.text);
+        if (perPlayerTextProvider != null) {
+            // Set a dummy text; the real text will be injected by the packet listener
+            meta.setText(Component.empty());
+        } else {
+            meta.setText(this.text);
+        }
 
         meta.setInterpolationDelay(-1);
         meta.setTransformationInterpolationDuration(this.interpolationDurationTransformation);
@@ -217,6 +230,22 @@ public class TextHologram extends Hologram<TextHologram> {
         if (!placeholderApiEnabled) {
             this.text = MiniMessage.get(replaceFontImages(rawText));
         }
+        return this;
+    }
+
+    public TextHologram setTranslation(Translation translation, TagResolver... resolvers) {
+        this.perPlayerTextProvider = player -> {
+            GamePlayer gp = MegalodonIntegration.getGamePlayer(player);
+            if (gp == null) {
+                return translation.component(Locale.ENGLISH, resolvers);
+            }
+            return translation.component(gp, resolvers);
+        };
+        return this;
+    }
+
+    public TextHologram setPerPlayerText(Function<Player, Component> provider) {
+        this.perPlayerTextProvider = provider;
         return this;
     }
 
