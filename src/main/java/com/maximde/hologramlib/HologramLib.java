@@ -146,18 +146,17 @@ public abstract class HologramLib {
                 plugin.getLogger().log(Level.INFO, "PlaceholderAPI not found or not enabled. PlaceholderAPI support will be disabled.");
             }
 
-            Plugin megalodonPlugin = pluginManager.getPlugin("Megalodon");
+            Plugin megalodonPlugin = pluginManager.getPlugin("megalodon");
             if (megalodonPlugin != null && megalodonPlugin.isEnabled()) {
                 try {
-                    Class<?> clazz = Class.forName("studio.o7.megalodon.Megalodon");
-                    Method getInstance = clazz.getMethod("getInstance");
-                    Object instance = getInstance.invoke(null);
-                    MegalodonIntegration.setMegalodon((Megalodon) instance);
+                    Megalodon megalodon = Megalodon.get(megalodonPlugin);
+                    MegalodonIntegration.setMegalodon(megalodon);
 
                     PacketEvents.getAPI().getEventManager().registerListener(
                             new MegalodonTranslationListener(), PacketListenerPriority.HIGH
                     );
-                    plugin.getLogger().info("Megalodon found – translation support enabled.");
+
+                    plugin.getLogger().info("Megalodon found! translation support enabled.");
                 } catch (Exception e) {
                     plugin.getLogger().warning("Failed to hook into Megalodon: " + e.getMessage());
                 }

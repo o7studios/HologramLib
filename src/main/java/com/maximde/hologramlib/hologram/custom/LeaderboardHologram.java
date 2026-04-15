@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
@@ -18,6 +19,7 @@ import studio.o7.megalodon.localization.Translation;
 
 import java.text.NumberFormat;
 import java.util.*;
+import java.util.function.Function;
 
 @Getter
 @ApiStatus.Experimental
@@ -43,6 +45,9 @@ public class LeaderboardHologram {
     @Setter
     @Accessors(chain = true)
     private LeaderboardOptions options;
+
+    @Setter
+    private Function<Player, Component> perPlayerTextProvider = null;
 
     /**
      * Creates a leaderboard with the specified options and ID.
@@ -342,8 +347,12 @@ public class LeaderboardHologram {
             return;
         }
 
-        String leaderboardText = buildLeaderboardText();
-        textHologram.setMiniMessageText(leaderboardText);
+        if (perPlayerTextProvider != null) {
+            textHologram.setPerPlayerText(perPlayerTextProvider);
+        } else {
+            String leaderboardText = buildLeaderboardText();
+            textHologram.setMiniMessageText(leaderboardText);
+        }
 
         if (!textHologram.isDead()) {
             textHologram.update();

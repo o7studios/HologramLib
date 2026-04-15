@@ -8,6 +8,7 @@ import com.maximde.hologramlib.utils.Vector3F;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Display;
@@ -16,6 +17,7 @@ import org.jetbrains.annotations.ApiStatus;
 
 import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 /**
  * An advanced leaderboard system that supports:
@@ -79,11 +81,9 @@ public class SwitchableLeaderboard implements HologramManager.Events {
      */
     private static class PlayerState {
         private final Map<String, Integer> buttonStates = new HashMap<>();
-        @Getter
-        @Setter
+        @Getter @Setter
         private String currentStatMode;
-        @Setter
-        @Getter
+        @Setter @Getter
         private int currentPage = 0;
 
         public PlayerState(String initialStatMode) {
@@ -97,7 +97,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
         public void setButtonState(String buttonId, int stateIndex) {
             buttonStates.put(buttonId, stateIndex);
         }
-
     }
 
     /**
@@ -157,16 +156,16 @@ public class SwitchableLeaderboard implements HologramManager.Events {
 
         private TextHologram hologram;
         private InteractionBox interaction;
-
         private List<TextHologram> stateHolograms = new ArrayList<>();
-        List<TextHologram> getStateHolograms() { return stateHolograms; }
-        void setStateHolograms(List<TextHologram> stateHolograms) { this.stateHolograms = stateHolograms; }
-
         /**
          * Callback when button state changes
          * Parameters: Player, new state index
          */
         private BiConsumer<Player, Integer> onStateChange;
+        private Function<Player, Component> perPlayerTextProvider = null;
+
+        List<TextHologram> getStateHolograms() { return stateHolograms; }
+        void setStateHolograms(List<TextHologram> stateHolograms) { this.stateHolograms = stateHolograms; }
 
         public static class Builder {
             private final String id;
@@ -270,6 +269,16 @@ public class SwitchableLeaderboard implements HologramManager.Events {
 
         void setInteraction(InteractionBox interaction) {
             this.interaction = interaction;
+        }
+
+        public void setPerPlayerTextProvider(Function<Player, Component> provider) {
+            this.perPlayerTextProvider = provider;
+            if (hologram != null) {
+                hologram.setPerPlayerText(provider);
+            }
+            for (TextHologram holo : stateHolograms) {
+                holo.setPerPlayerText(provider);
+            }
         }
     }
 
@@ -440,7 +449,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
         for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
             PlayerState state = new PlayerState(firstStatModeId);
             playerStates.put(player.getUniqueId(), state);
-
             refreshPlayerView(player);
         }
     }
@@ -687,7 +695,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
 
         float yawDeg = firstMode.getPages().get(0).getXRotation();
         double yawRad = Math.toRadians(yawDeg);
-
         double dx = Math.cos(yawRad) * offset;
         double dz = -Math.sin(yawRad) * offset;
 
@@ -737,7 +744,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
             }
         }
 
-        // Teleport arrows
         if (showArrows) {
             Location leftLoc = computeArrowLocation(-arrowOffset);
             Location rightLoc = computeArrowLocation(arrowOffset);
@@ -751,7 +757,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
             rightInteraction.teleport(rightLoc);
         }
 
-        // Teleport state buttons
         for (StateButton button : stateButtons) {
             Location buttonLoc = baseLocation.clone().add(
                     button.getRelativePosition().x,
@@ -789,7 +794,6 @@ public class SwitchableLeaderboard implements HologramManager.Events {
     public void onQuit(Player player) {
         playerStates.remove(player.getUniqueId());
     }
-
 
     public SwitchableLeaderboard setArrowOffset(double arrowOffset) {
         this.arrowOffset = arrowOffset;
@@ -938,5 +942,24 @@ public class SwitchableLeaderboard implements HologramManager.Events {
         }
 
         return interactions;
+    }
+
+    public SwitchableLeaderboard setPerPlayerTextProvider(Function<Player, Component> provider) {
+        for (StatMode statMode : statModes.values()) {
+            for (LeaderboardHologram page : statMode.getPages()) {
+                page.setPerPlayerTextProvider(provider);
+            }
+        }
+        return this;
+    }
+
+    public void setButtonTextProvider(String buttonId, Function<Player, Component> provider) {
+        StateButton button = stateButtons.stream()
+                .filter(b -> b.getId().equals(buttonId))
+                .findFirst()
+                .orElse(null);
+        if (button != null) {
+            button.setPerPlayerTextProvider(provider);
+        }
     }
 }

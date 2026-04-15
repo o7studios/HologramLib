@@ -7,17 +7,15 @@ import com.maximde.hologramlib.utils.Vector3F;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.ApiStatus;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.function.Function;
 
 @Getter
 @ApiStatus.Experimental
@@ -38,13 +36,9 @@ public class PagedLeaderboard implements HologramManager.Events {
     private boolean spawned = false;
 
     private double arrowOffset = 3;
-
     private double arrowHeight = 1.0;
-
     private String leftArrowText = "<gold><</gold>";
-
     private String rightArrowText = "<gold>></gold>";
-
     private Vector3F interactionBoxSize = new Vector3F(0.7F, 1, 0);
 
     @Setter @Accessors(chain = true)
@@ -150,7 +144,6 @@ public class PagedLeaderboard implements HologramManager.Events {
      * Spawns the paged leaderboard at the specified location
      */
     public void init(Location location) {
-
         if (spawned) {
             throw new IllegalStateException("PagedLeaderboard is already spawned!");
         }
@@ -184,12 +177,9 @@ public class PagedLeaderboard implements HologramManager.Events {
 
     private Location computeArrowLocation(double offset) {
         float yawDeg = pages.get(0).getXRotation();
-
         double yawRad = Math.toRadians(yawDeg);
-
         double dx =  Math.cos(yawRad) * offset;
         double dz = -Math.sin(yawRad) * offset;
-
         return baseLocation.clone().add(dx, arrowHeight, dz);
     }
 
@@ -211,9 +201,6 @@ public class PagedLeaderboard implements HologramManager.Events {
         }
     }
 
-    /**
-     * Goes to the next page for the specified player
-     */
     public void nextPage(Player player) {
         if (!spawned || pages.isEmpty()) return;
 
@@ -227,9 +214,6 @@ public class PagedLeaderboard implements HologramManager.Events {
         }
     }
 
-    /**
-     * Goes to the previous page for the specified player
-     */
     public void previousPage(Player player) {
         if (!spawned || pages.isEmpty() || singleDirectionCycling) return;
 
@@ -283,9 +267,6 @@ public class PagedLeaderboard implements HologramManager.Events {
         return this;
     }
 
-    /**
-     * Switches the player to a specific page
-     */
     private void switchToPage(Player player, int pageIndex) {
         if (!spawned || pageIndex < 0 || pageIndex >= pages.size()) return;
 
@@ -302,21 +283,15 @@ public class PagedLeaderboard implements HologramManager.Events {
         playerCurrentPage.put(playerId, pageIndex);
     }
 
-    /**
-     * Gets the current page index for a player
-     */
+
     public int getCurrentPage(Player player) {
         return playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
     }
 
-    /**
-     * Adds a new leaderboard page
-     */
     public PagedLeaderboard addPage(LeaderboardHologram page) {
         pages.add(page);
         if (spawned) {
             page.teleport(baseLocation);
-
             for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
                 page.hide(player);
             }
@@ -324,9 +299,6 @@ public class PagedLeaderboard implements HologramManager.Events {
         return this;
     }
 
-    /**
-     * Removes a page by index
-     */
     public boolean removePage(int index) {
         if (index < 0 || index >= pages.size()) return false;
 
@@ -353,9 +325,6 @@ public class PagedLeaderboard implements HologramManager.Events {
         return true;
     }
 
-    /**
-     * Updates all leaderboard pages
-     */
     public void updateAllPages() {
         for (LeaderboardHologram page : pages) {
             page.update();
@@ -554,6 +523,20 @@ public class PagedLeaderboard implements HologramManager.Events {
             rightInteraction.teleport(rightLoc);
         }
 
+        return this;
+    }
+
+    public PagedLeaderboard setPerPlayerTextProvider(Function<Player, Component> provider) {
+        for (LeaderboardHologram page : pages) {
+            page.setPerPlayerTextProvider(provider);
+        }
+        return this;
+    }
+
+    public PagedLeaderboard setPageProvider(int pageIndex, Function<Player, Component> provider) {
+        if (pageIndex >= 0 && pageIndex < pages.size()) {
+            pages.get(pageIndex).setPerPlayerTextProvider(provider);
+        }
         return this;
     }
 }
