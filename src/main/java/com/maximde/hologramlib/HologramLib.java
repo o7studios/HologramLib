@@ -11,10 +11,7 @@ import com.maximde.hologramlib.hook.BedrockPlayerHeadFilter;
 import com.maximde.hologramlib.hook.HeadDatabaseHook;
 import com.maximde.hologramlib.hook.MegalodonIntegration;
 import com.maximde.hologramlib.hook.PlaceholderAPIHook;
-import com.maximde.hologramlib.listener.InteractionPacketListener;
-import com.maximde.hologramlib.listener.MegalodonTranslationListener;
-import com.maximde.hologramlib.listener.PlayerJoinListener;
-import com.maximde.hologramlib.listener.PlayerQuitListener;
+import com.maximde.hologramlib.listener.*;
 import com.maximde.hologramlib.utils.BukkitTasks;
 import com.maximde.hologramlib.utils.ItemsAdderHolder;
 import com.maximde.hologramlib.utils.PlayerUtils;
@@ -154,6 +151,10 @@ public abstract class HologramLib {
 
                     PacketEvents.getAPI().getEventManager().registerListener(
                             new MegalodonTranslationListener(), PacketListenerPriority.HIGH
+                    );
+
+                    plugin.getServer().getPluginManager().registerEvents(
+                            new LanguageChangeListener(hologramManager), plugin
                     );
 
                     plugin.getLogger().info("Megalodon found! translation support enabled.");
