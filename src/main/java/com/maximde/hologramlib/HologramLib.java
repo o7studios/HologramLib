@@ -23,7 +23,7 @@ import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder
 import lombok.Getter;
 import me.tofaa.entitylib.APIConfig;
 import me.tofaa.entitylib.EntityLib;
-import me.tofaa.entitylib.spigot.SpigotEntityLibPlatform;
+import com.maximde.hologramlib.utils.HologramEntityLibPlatform;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandMap;
 import org.bukkit.plugin.Plugin;
@@ -32,7 +32,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import studio.o7.megalodon.Megalodon;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.logging.Level;
 
@@ -128,9 +127,12 @@ public abstract class HologramLib {
             hologramManager = new HologramManager();
             PacketEvents.getAPI().getEventManager().registerListener(new InteractionPacketListener(hologramManager),
                     PacketListenerPriority.LOW);
+            PacketEvents.getAPI().getEventManager().registerListener(new com.maximde.hologramlib.hologram.EntityTrackerListener(),
+                    PacketListenerPriority.NORMAL);
 
             plugin.getServer().getPluginManager().registerEvents(new PlayerJoinListener(hologramManager), plugin);
             plugin.getServer().getPluginManager().registerEvents(new PlayerQuitListener(hologramManager), plugin);
+            plugin.getServer().getPluginManager().registerEvents(new PlayerSyncListener(hologramManager), plugin);
 
 
             PluginManager pluginManager = Bukkit.getPluginManager();
@@ -163,6 +165,14 @@ public abstract class HologramLib {
                 }
             }
 
+            // Loaded is enough, the listener only touches HeldenUI classes once a UI hologram exists.
+            if (pluginManager.getPlugin("HeldenUI") != null) {
+                PacketEvents.getAPI().getEventManager().registerListener(
+                        new UiHologramListener(hologramManager), PacketListenerPriority.HIGHEST
+                );
+                plugin.getLogger().info("HeldenUI found! UI hologram support enabled.");
+            }
+
             plugin.getLogger().log(Level.INFO, "Initializing Bedrock player head filter...");
             new BedrockPlayerHeadFilter(PacketEvents.getAPI());
 
@@ -188,6 +198,8 @@ public abstract class HologramLib {
     }
 
     public static void onDisable() {
+        // Nothing to clean up when init failed.
+        if (hologramManager == null) return;
         try {
             hologramManager.removeAll();
             hologramManager.removeAllInteractionBoxes();
@@ -211,7 +223,7 @@ public abstract class HologramLib {
     }
 
     private static void initializeEntityLib() {
-        SpigotEntityLibPlatform platform = new SpigotEntityLibPlatform(plugin);
+        HologramEntityLibPlatform platform = new HologramEntityLibPlatform(plugin);
         APIConfig config = new APIConfig(PacketEvents.getAPI())
                 .usePlatformLogger();
         EntityLib.init(platform, config);

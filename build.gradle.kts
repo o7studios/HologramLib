@@ -1,7 +1,7 @@
 project.version = "1.8.2"
 
 group = "com.github.max1mde"
-version = "1.8.5"
+version = "1.8.7"
 
 plugins {
     kotlin("jvm") version "2.1.10"
@@ -21,6 +21,8 @@ publishing {
 
 repositories {
     mavenCentral()
+    // HeldenUI comes from "gradlew publishToMavenLocal" in project-interface/plugin.
+    mavenLocal { content { includeModule("studio.o7", "heldenui") } }
     maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     maven("https://oss.sonatype.org/content/groups/public/")
     maven("https://repo.codemc.io/repository/maven-releases/")
@@ -38,10 +40,11 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok:1.18.44")
     compileOnly("studio.o7:megalodon-api:0.0.16")
     compileOnly("org.spigotmc:spigot-api:1.19.4-R0.1-SNAPSHOT")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.10.0")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.12.1")
     compileOnly("com.github.LoneDev6:API-ItemsAdder:3.6.1")
     compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnly("com.arcaniax:HeadDatabase-API:1.3.2")
+    compileOnly("studio.o7:heldenui:0.1.0-SNAPSHOT")
 
     implementation("io.github.tofaa2:spigot:3.0.3-SNAPSHOT")
     implementation("net.kyori:adventure-text-minimessage:4.17.0")
@@ -97,6 +100,6 @@ bukkit {
     author = "MaximDe"
     foliaSupported = true
     depend = listOf("packetevents")
-    softDepend = listOf("ItemsAdder", "PlaceholderAPI", "HeadDatabase", "megalodon")
+    softDepend = listOf("ItemsAdder", "PlaceholderAPI", "HeadDatabase", "megalodon", "HeldenUI")
     name = "HologramLib"
 }

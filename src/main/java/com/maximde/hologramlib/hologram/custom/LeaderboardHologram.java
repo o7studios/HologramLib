@@ -46,6 +46,10 @@ public class LeaderboardHologram {
     @Accessors(chain = true)
     private LeaderboardOptions options;
 
+    /**
+     * -- GETTER --
+     *  Returns the per‑player text provider if set, otherwise null.
+     */
     @Setter
     private Function<Player, Component> perPlayerTextProvider = null;
 
@@ -125,7 +129,8 @@ public class LeaderboardHologram {
      * @param data Map of UUID to PlayerScore
      */
     public void setAllScores(Map<UUID, PlayerScore> data) {
-        this.playerData = new HashMap<>(data);
+        this.playerData.clear();
+        this.playerData.putAll(data);
     }
 
     /**
@@ -139,10 +144,6 @@ public class LeaderboardHologram {
 
 
     private String buildLeaderboardText() {
-        if (playerData.isEmpty()) {
-            return "";
-        }
-
         List<Map.Entry<UUID, PlayerScore>> sorted = getSortedEntries();
         StringBuilder text = new StringBuilder();
 
@@ -803,5 +804,20 @@ public class LeaderboardHologram {
                 return this.footerFormat("<lang:" + translation.key().value() + ">");
             }
         }
+    }
+
+    /**
+     * Returns the current leaderboard text as a MiniMessage string.
+     * This is built from the current playerData and options.
+     */
+    public String getTextContent() {
+        return buildLeaderboardText();
+    }
+
+    /**
+     * Returns an unmodifiable view of the current player scores.
+     */
+    public Map<UUID, PlayerScore> getPlayerDataSnapshot() {
+        return Collections.unmodifiableMap(playerData);
     }
 }

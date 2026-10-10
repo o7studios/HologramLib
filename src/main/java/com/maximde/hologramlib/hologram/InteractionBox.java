@@ -23,6 +23,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
@@ -88,7 +89,7 @@ public class InteractionBox {
      * Players which will not be automatically added as viewers no matter which render mode
      */
     @Getter
-    private final List<Player> blacklistedViewers = new ArrayList<>();
+    private final Set<Player> blacklistedViewers = ConcurrentHashMap.newKeySet();
 
     @FunctionalInterface
     public interface OnInteract {
@@ -220,18 +221,21 @@ public class InteractionBox {
                 Player attachedPlayer = getPlayerByEntityId(attachedEntityId);
                 if (attachedPlayer != null && attachedPlayer.isOnline()) {
                     Location playerLocation = attachedPlayer.getLocation();
+                    if (this.location != null) {
+                        playerLocation.setYaw(this.location.getYaw());
+                        playerLocation.setPitch(this.location.getPitch());
+                    }
                     if (playerLocation.getWorld() != null) {
                         this.teleport(playerLocation);
                     }
                 }
+                WrapperPlayServerSetPassengers passengerPacket = new WrapperPlayServerSetPassengers(
+                        attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID));
                 Set<UUID> currentViewers = new HashSet<>(this.entity.getViewers());
                 currentViewers.forEach(uuid -> {
                     Player player = Bukkit.getPlayer(uuid);
                     if (player != null && player.isOnline()) {
-                        sendPacket(new WrapperPlayServerSetPassengers(
-                                        attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID)),
-                                Collections.singletonList(player)
-                        );
+                        sendPacket(passengerPacket, Collections.singletonList(player));
                     }
                 });
             }
@@ -270,6 +274,12 @@ public class InteractionBox {
 
             viewersToRemove.forEach(this.entity::removeViewer);
             this.addAllViewers(viewersToKeep);
+
+            if (attachedEntityId != null) {
+                WrapperPlayServerSetPassengers passengerPacket = new WrapperPlayServerSetPassengers(
+                        attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID));
+                getViewers().forEach(p -> sendPacket(passengerPacket, Collections.singletonList(p)));
+            }
         }
     }
 
@@ -435,13 +445,21 @@ public class InteractionBox {
     }
 
     public InteractionBox addViewer(Player player) {
+        if (this.entity.hasViewer(player.getUniqueId())) return this;
         this.entity.addViewer(player.getUniqueId());
-        if (attachedEntityId != null)
-            sendPacket(new WrapperPlayServerSetPassengers(
-                            attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID)),
+        if (attachedEntityId != null) {
+            final int vehicleId = attachedEntityId;
+            final int[] passengers = addElement(PassengerManager.getPassengers(vehicleId), this.entityID);
+            BukkitTasks.runTaskLater(() -> sendPacket(
+                    new WrapperPlayServerSetPassengers(vehicleId, passengers),
                     Collections.singletonList(player)
-            );
+            ), 1L);
+        }
         return this;
+    }
+
+    public boolean hasViewer(UUID uuid) {
+        return this.entity.hasViewer(uuid);
     }
 
     public InteractionBox removeViewer(Player player) {

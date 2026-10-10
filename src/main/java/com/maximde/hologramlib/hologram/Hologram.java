@@ -122,6 +122,13 @@ public abstract class Hologram<T extends Hologram<T>> {
 
     protected @Nullable Integer attachedEntityId;
 
+    /**
+     * Cached resolution of {@link #attachedEntityId} to a player so the periodic
+     * update task doesn't have to scan all online players every run. Weak so a
+     * stale cache entry can never pin a player (and its world) in the heap.
+     */
+    private volatile @Nullable java.lang.ref.WeakReference<Player> attachedPlayerCache;
+
     @Getter
     protected boolean interactive;
 
@@ -188,7 +195,14 @@ public abstract class Hologram<T extends Hologram<T>> {
      */
     public T update() {
         this.updateAffectedPlayers();
+        EntityMeta meta = this.entity.getEntityMeta();
+        // Batch the metadata setters: with notifications on, EntityLib sends one
+        // ENTITY_METADATA packet per setter call (~20 packets per update). Turning
+        // them off and back on flushes all changes as a single packet, or none at
+        // all when nothing actually changed.
+        meta.setNotifyAboutChanges(false);
         this.applyMeta();
+        meta.setNotifyAboutChanges(true);
         return self();
     }
 
@@ -224,6 +238,11 @@ public abstract class Hologram<T extends Hologram<T>> {
      */
     @Deprecated
     public void kill() {
+        if (attachedEntityId != null) {
+            // Deregister but keep attachedEntityId so a later re-spawn can re-attach.
+            PassengerManager.unregisterAttachment(attachedEntityId, this);
+            PassengerManager.setPassengers(attachedEntityId, removeElement(PassengerManager.getPassengers(attachedEntityId), this.entityID));
+        }
         this.entity.remove();
         this.task.cancel();
         this.dead = true;
@@ -260,23 +279,25 @@ public abstract class Hologram<T extends Hologram<T>> {
 
         if(renderMode == RenderMode.VIEWER_LIST) {
             if (attachedEntityId != null) {
-                Player attachedPlayer = getPlayerByEntityId(attachedEntityId);
+                Player attachedPlayer = resolveAttachedPlayer();
                 if (attachedPlayer != null && attachedPlayer.isOnline()) {
                     Location playerLocation = attachedPlayer.getLocation();
+                    if (this.location != null) {
+                        playerLocation.setYaw(this.location.getYaw());
+                        playerLocation.setPitch(this.location.getPitch());
+                    }
                     if (playerLocation.getWorld() != null) {
-                        this.teleport(playerLocation);
+                        // While mounted, the client derives this entity's position from
+                        // its vehicle, so teleport packets are ignored anyway. Only keep
+                        // the server-side location fresh — it is used as the spawn
+                        // position when a viewer (re-)tracks the hologram. Passenger
+                        // packets are handled by attach/addViewer/EntityTrackerListener,
+                        // not re-broadcast here.
+                        this.location = playerLocation;
+                        this.entity.setLocation(SpigotConversionUtil.fromBukkitLocation(playerLocation));
+                        if (this.interactionBox != null) this.interactionBox.teleport(playerLocation);
                     }
                 }
-                Set<UUID> currentViewers = new HashSet<>(this.entity.getViewers());
-                currentViewers.forEach(uuid -> {
-                    Player player = Bukkit.getPlayer(uuid);
-                    if (player != null && player.isOnline()) {
-                        sendPacket(new WrapperPlayServerSetPassengers(
-                                        attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID)),
-                                Collections.singletonList(player)
-                        );
-                    }
-                });
             }
             return;
         }
@@ -301,7 +322,7 @@ public abstract class Hologram<T extends Hologram<T>> {
                     .toList();
 
             if (this.renderMode == RenderMode.NOT_ATTACHED_PLAYER && attachedEntityId != null) {
-                Player attachedPlayer = getPlayerByEntityId(attachedEntityId);
+                Player attachedPlayer = resolveAttachedPlayer();
                 if (attachedPlayer != null) {
                     viewersToKeep = viewersToKeep.stream()
                             .filter(player -> !player.equals(attachedPlayer))
@@ -313,9 +334,26 @@ public abstract class Hologram<T extends Hologram<T>> {
             viewersToKeep.forEach(player -> viewersToRemove.remove(player.getUniqueId()));
 
             viewersToRemove.forEach(this.entity::removeViewer);
+            // Passenger packets for newly added viewers are sent by addViewer itself;
+            // existing viewers are kept mounted by EntityTrackerListener, so no
+            // periodic re-broadcast is needed here.
             this.addAllViewers(viewersToKeep);
-
         }
+    }
+
+    /**
+     * Resolves the attached entity id to a player, caching the result so the periodic
+     * update task doesn't scan every online player on each run.
+     */
+    protected @Nullable Player resolveAttachedPlayer() {
+        Integer attachedId = this.attachedEntityId;
+        if (attachedId == null) return null;
+        java.lang.ref.WeakReference<Player> ref = this.attachedPlayerCache;
+        Player cached = ref != null ? ref.get() : null;
+        if (cached != null && cached.isOnline() && cached.getEntityId() == attachedId) return cached;
+        Player resolved = getPlayerByEntityId(attachedId);
+        this.attachedPlayerCache = resolved != null ? new java.lang.ref.WeakReference<>(resolved) : null;
+        return resolved;
     }
 
     protected void sendPacket(PacketWrapper<?> packet, List<Player> players) {
@@ -333,6 +371,8 @@ public abstract class Hologram<T extends Hologram<T>> {
         }
         this.entity.spawn(SpigotConversionUtil.fromBukkitLocation(this.location));
         this.dead = false;
+        // Re-register a still-configured attachment when a killed hologram is revived.
+        if (attachedEntityId != null) PassengerManager.registerAttachment(attachedEntityId, this);
         if (this.interactionBox != null) this.interactionBox.teleport(location);
     }
 
@@ -373,16 +413,29 @@ public abstract class Hologram<T extends Hologram<T>> {
      * @param entityId The entity id to attach the hologram to
      */
     public void attach(int entityId) {
+        Integer previous = attachedEntityId;
+        if (previous != null && previous != entityId) {
+            PassengerManager.unregisterAttachment(previous, this);
+            PassengerManager.setPassengers(previous, removeElement(PassengerManager.getPassengers(previous), this.entityID));
+        }
         attachedEntityId = entityId;
+        attachedPlayerCache = null;
 
         if (renderMode == RenderMode.NOT_ATTACHED_PLAYER) {
-            Player attachedPlayer = getPlayerByEntityId(entityId);
+            Player attachedPlayer = resolveAttachedPlayer();
             if (attachedPlayer != null) {
                 removeViewer(attachedPlayer);
             }
         }
 
-        WrapperPlayServerSetPassengers attachPacket = new WrapperPlayServerSetPassengers(entityId, addElement(PassengerManager.getPassengers(entityId), this.entityID));
+        // Update PM synchronously before the async send so sequential attach() calls
+        // from the same thread each see the accumulated passenger list rather than racing
+        // on an empty/stale PM (PM is otherwise only updated via onPacketSend, which
+        // never fires when there are no viewers yet).
+        PassengerManager.registerAttachment(entityId, this);
+        int[] newPassengers = PassengerManager.getMergedPassengers(entityId);
+        PassengerManager.setPassengers(entityId, newPassengers);
+        WrapperPlayServerSetPassengers attachPacket = new WrapperPlayServerSetPassengers(entityId, newPassengers);
         BukkitTasks.runTaskAsync(() -> this.entity.sendPacketsToViewers(attachPacket));
     }
 
@@ -391,16 +444,21 @@ public abstract class Hologram<T extends Hologram<T>> {
      */
     public void detach() {
         if (attachedEntityId != null) {
+            int vehicleId = attachedEntityId;
             if (renderMode == RenderMode.NOT_ATTACHED_PLAYER) {
-                Player previouslyAttachedPlayer = getPlayerByEntityId(attachedEntityId);
+                Player previouslyAttachedPlayer = resolveAttachedPlayer();
                 if (previouslyAttachedPlayer != null) {
                     addViewer(previouslyAttachedPlayer);
                 }
             }
 
-            WrapperPlayServerSetPassengers detachPacket = new WrapperPlayServerSetPassengers(attachedEntityId, removeElement(PassengerManager.getPassengers(attachedEntityId), this.entityID));
+            PassengerManager.unregisterAttachment(vehicleId, this);
+            int[] remaining = removeElement(PassengerManager.getMergedPassengers(vehicleId), this.entityID);
+            PassengerManager.setPassengers(vehicleId, remaining);
+            WrapperPlayServerSetPassengers detachPacket = new WrapperPlayServerSetPassengers(vehicleId, remaining);
             BukkitTasks.runTaskAsync(() -> this.entity.sendPacketsToViewers(detachPacket));
             attachedEntityId = null;
+            attachedPlayerCache = null;
         }
     }
 
@@ -666,13 +724,25 @@ public abstract class Hologram<T extends Hologram<T>> {
     }
 
     public T addViewer(Player player) {
-        if(this.entity.hasViewer(player.getUniqueId())) return self();
-        this.entity.addViewer(player.getUniqueId());
-        if (attachedEntityId != null)
+        UUID viewerId = player.getUniqueId();
+        if(this.entity.hasViewer(viewerId)) return self();
+        if (attachedEntityId != null && !EntityTrackerListener.isTracking(viewerId, attachedEntityId)) {
+            // The viewer's client doesn't know the vehicle (out of tracking range), so a
+            // spawn now could never be mounted and would float detached at this spot.
+            // Register the viewer without packets; EntityTrackerListener spawns and
+            // mounts the hologram the moment the vehicle spawns for this client.
+            this.entity.addViewerSilently(viewerId);
+            return self();
+        }
+        this.entity.addViewer(viewerId);
+        if (attachedEntityId != null) {
+            // The spawn packet from addViewer and this passenger packet go through the
+            // same ordered channel, so mounting happens in the same flush — no delay
+            // needed, and no frame where the hologram renders unmounted.
             sendPacket(new WrapperPlayServerSetPassengers(
-                            attachedEntityId, addElement(PassengerManager.getPassengers(attachedEntityId), this.entityID)),
-                    Collections.singletonList(player)
-            );
+                            attachedEntityId, PassengerManager.getMergedPassengers(attachedEntityId)),
+                    Collections.singletonList(player));
+        }
         return self();
     }
 
@@ -695,6 +765,10 @@ public abstract class Hologram<T extends Hologram<T>> {
             }
         });
         return viewers;
+    }
+
+    public boolean hasViewer(UUID viewer) {
+        return this.entity.hasViewer(viewer);
     }
 
     public T addAllViewers(List<Player> viewerList) {

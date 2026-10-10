@@ -31,6 +31,14 @@ public class PagedLeaderboard implements HologramManager.Events {
     private InteractionBox leftInteraction;
     private InteractionBox rightInteraction;
 
+    /**
+     * Single hologram entity that is actually rendered. Its text is driven by a
+     * per-player provider that reads playerCurrentPage, so page switches are
+     * metadata-only updates with no entity destroy/spawn flicker.
+     */
+    @Getter
+    private LeaderboardHologram activeDisplay;
+
     private Location baseLocation;
     @Getter
     private boolean spawned = false;
@@ -118,9 +126,11 @@ public class PagedLeaderboard implements HologramManager.Events {
     @ApiStatus.Experimental
     public PagedLeaderboard rotate(float x) {
         for (LeaderboardHologram page : pages) {
-            page.rotate(x, 0);
+            page.rotate(x, 0); // kept so computeArrowLocation() can read xRotation from page 0
         }
-
+        if (activeDisplay != null) {
+            activeDisplay.rotate(x, 0);
+        }
         if (showArrows) {
             leftArrow.setRotation(x, 0).update();
             rightArrow.setRotation(x, 0).update();
@@ -155,8 +165,8 @@ public class PagedLeaderboard implements HologramManager.Events {
         this.baseLocation = location.clone();
         spawned = true;
 
-        for (LeaderboardHologram page : pages) {
-            page.teleport(baseLocation);
+        if (activeDisplay != null) {
+            activeDisplay.teleport(baseLocation);
         }
 
         if (showArrows) {
@@ -187,17 +197,11 @@ public class PagedLeaderboard implements HologramManager.Events {
      * Shows the initial page (page 0) to all online players
      */
     private void showInitialPage() {
-        if (!pages.isEmpty()) {
-            for (LeaderboardHologram page : pages) {
-                for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
-                    page.hide(player);
-                }
-            }
-
+        if (!pages.isEmpty() && activeDisplay != null) {
             for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
                 playerCurrentPage.put(player.getUniqueId(), 0);
-                pages.get(0).show(player);
             }
+            activeDisplay.update();
         }
     }
 
@@ -275,12 +279,10 @@ public class PagedLeaderboard implements HologramManager.Events {
 
         if (currentPage == pageIndex) return;
 
-        if (currentPage < pages.size()) {
-            pages.get(currentPage).hide(player);
-        }
-
-        pages.get(pageIndex).show(player);
         playerCurrentPage.put(playerId, pageIndex);
+        if (activeDisplay != null) {
+            activeDisplay.update();
+        }
     }
 
 
@@ -288,13 +290,28 @@ public class PagedLeaderboard implements HologramManager.Events {
         return playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
     }
 
+    private void setupActiveDisplayProvider() {
+        activeDisplay.setPerPlayerTextProvider(player -> {
+            if (pages.isEmpty()) return Component.empty();
+            int pageIndex = playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
+            if (pageIndex < 0 || pageIndex >= pages.size()) pageIndex = 0;
+            LeaderboardHologram page = pages.get(pageIndex);
+            if (page.getPerPlayerTextProvider() != null) {
+                return page.getPerPlayerTextProvider().apply(player);
+            }
+            return net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                    .deserialize(page.getTextContent());
+        });
+    }
+
     public PagedLeaderboard addPage(LeaderboardHologram page) {
         pages.add(page);
+        if (activeDisplay == null) {
+            activeDisplay = new LeaderboardHologram(page.getOptions(), baseId + "_display");
+            setupActiveDisplayProvider();
+        }
         if (spawned) {
-            page.teleport(baseLocation);
-            for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
-                page.hide(player);
-            }
+            activeDisplay.update();
         }
         return this;
     }
@@ -302,32 +319,25 @@ public class PagedLeaderboard implements HologramManager.Events {
     public boolean removePage(int index) {
         if (index < 0 || index >= pages.size()) return false;
 
-        LeaderboardHologram removedPage = pages.remove(index);
+        pages.remove(index);
 
-        for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
-            removedPage.hide(player);
-        }
-
-        playerCurrentPage.entrySet().removeIf(entry -> {
+        for (Map.Entry<UUID, Integer> entry : playerCurrentPage.entrySet()) {
             int playerPage = entry.getValue();
-            if (playerPage == index) {
-                Player player = org.bukkit.Bukkit.getPlayer(entry.getKey());
-                if (player != null && !pages.isEmpty()) {
-                    switchToPage(player, 0);
-                }
-                return true;
-            } else if (playerPage > index) {
+            if (playerPage >= index && playerPage > 0) {
                 entry.setValue(playerPage - 1);
             }
-            return false;
-        });
+        }
+
+        if (spawned && activeDisplay != null) {
+            activeDisplay.update();
+        }
 
         return true;
     }
 
     public void updateAllPages() {
-        for (LeaderboardHologram page : pages) {
-            page.update();
+        if (spawned && activeDisplay != null) {
+            activeDisplay.update();
         }
     }
 
@@ -337,8 +347,10 @@ public class PagedLeaderboard implements HologramManager.Events {
     public void show(Player player) {
         if (!spawned) return;
 
-        for (LeaderboardHologram page : pages) {
-            page.hide(player);
+        playerCurrentPage.putIfAbsent(player.getUniqueId(), 0);
+
+        if (activeDisplay != null) {
+            activeDisplay.show(player);
         }
 
         if (showArrows) {
@@ -349,13 +361,6 @@ public class PagedLeaderboard implements HologramManager.Events {
                 leftInteraction.show(player);
             }
             rightInteraction.show(player);
-        }
-
-        int currentPage = playerCurrentPage.getOrDefault(player.getUniqueId(), 0);
-        if (currentPage < pages.size()) {
-            pages.get(currentPage).show(player);
-        } else if (!pages.isEmpty()) {
-            switchToPage(player, 0);
         }
     }
 
@@ -372,8 +377,8 @@ public class PagedLeaderboard implements HologramManager.Events {
             rightArrow.hide(player);
         }
 
-        for (LeaderboardHologram page : pages) {
-            page.hide(player);
+        if (activeDisplay != null) {
+            activeDisplay.hide(player);
         }
     }
 
@@ -506,8 +511,8 @@ public class PagedLeaderboard implements HologramManager.Events {
 
         this.baseLocation = location.clone();
 
-        for (LeaderboardHologram page : pages) {
-            page.teleport(baseLocation);
+        if (activeDisplay != null) {
+            activeDisplay.teleport(baseLocation);
         }
 
         if (showArrows) {
@@ -530,12 +535,18 @@ public class PagedLeaderboard implements HologramManager.Events {
         for (LeaderboardHologram page : pages) {
             page.setPerPlayerTextProvider(provider);
         }
+        if (spawned && activeDisplay != null) {
+            activeDisplay.update();
+        }
         return this;
     }
 
     public PagedLeaderboard setPageProvider(int pageIndex, Function<Player, Component> provider) {
         if (pageIndex >= 0 && pageIndex < pages.size()) {
             pages.get(pageIndex).setPerPlayerTextProvider(provider);
+            if (spawned && activeDisplay != null) {
+                activeDisplay.update();
+            }
         }
         return this;
     }

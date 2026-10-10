@@ -138,9 +138,10 @@ public class HologramManager {
 
         registerEventHandler(pagedLeaderboard);
 
-        for (LeaderboardHologram page : pagedLeaderboard.getPages()) {
-            page.setFixedRotation();
-            spawn(page, location);
+        LeaderboardHologram activeDisplay = pagedLeaderboard.getActiveDisplay();
+        if (activeDisplay != null) {
+            activeDisplay.setFixedRotation();
+            spawn(activeDisplay, location);
         }
 
         spawn(pagedLeaderboard.getLeftArrow(), location);
@@ -175,8 +176,9 @@ public class HologramManager {
 
         boolean success = true;
 
-        for (LeaderboardHologram page : pagedLeaderboard.getPages()) {
-            success &= remove(page);
+        LeaderboardHologram activeDisplay = pagedLeaderboard.getActiveDisplay();
+        if (activeDisplay != null) {
+            success &= remove(activeDisplay);
         }
 
         success &= remove(pagedLeaderboard.getLeftArrow());

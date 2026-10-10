@@ -26,7 +26,7 @@ public final class MegalodonIntegration {
     public static Component translate(String key, Player player) {
         GamePlayer gp = getGamePlayer(player);
         if (gp == null) return Component.text("<lang:" + key + ">");
-        Translation translation = instance.translations().translation(key);
+        Translation translation = Translation.of(instance, key);
         return translation.component(gp);
     }
 }
