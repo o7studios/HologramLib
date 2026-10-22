@@ -8,6 +8,8 @@ import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
 import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
+import com.maximde.hologramlib.HologramLib;
+import com.maximde.hologramlib.hologram.TextHologram;
 import com.maximde.hologramlib.utils.MiniMessage;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
@@ -32,13 +34,22 @@ public class PlaceholderAPIHook implements PacketListener {
         Player player = event.getPlayer();
         if (player == null) return;
 
+        // Our own holograms keep their serialized text, anything else is serialized every time as before.
+        TextHologram hologram = HologramLib.getManager()
+                .flatMap(manager -> manager.getHologramByEntityId(packet.getEntityId()))
+                .filter(TextHologram.class::isInstance)
+                .map(TextHologram.class::cast)
+                .orElse(null);
+
         List<EntityData<?>> newMetadata = new ArrayList<>();
         boolean modified = false;
 
         for (EntityData<?> data : packet.getEntityMetadata()) {
             if (data.getIndex() == TEXT_DISPLAY_TEXT_INDEX && data.getType() == EntityDataTypes.ADV_COMPONENT) {
                 Component component = (Component) data.getValue();
-                String serialized = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(component);
+                String serialized = hologram != null
+                        ? hologram.getPlaceholderScan().of(component)
+                        : net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(component);
                 if (serialized.contains("%")) {
                     String parsed = PlaceholderAPI.setPlaceholders(player, serialized);
                     if (!serialized.equals(parsed)) {

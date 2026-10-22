@@ -66,6 +66,14 @@ public class TextHologram extends Hologram<TextHologram> {
     @Setter @Getter @Accessors(chain = true)
     private boolean placeholderApiEnabled = false;
 
+    /** The text as the PlaceholderAPI packet listener last saw it, see {@link SerializedText}. */
+    @Getter
+    private final SerializedText placeholderScan = new SerializedText();
+
+    /** The text as the translation packet listener last saw it, after PlaceholderAPI may have changed it. */
+    @Getter
+    private final SerializedText translationScan = new SerializedText();
+
     /**
      * Creates a new text hologram with the specified ID and render mode.
      *

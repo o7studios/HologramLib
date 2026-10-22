@@ -48,7 +48,7 @@ public class MegalodonTranslationListener implements PacketListener {
                     finalComponent = textHologram.getPerPlayerTextProvider().apply(player);
                 } else {
                     Component original = (Component) data.getValue();
-                    finalComponent = replaceLangTags(original, player);
+                    finalComponent = replaceLangTags(textHologram, original, player);
                 }
 
                 if (finalComponent != null) {
@@ -67,8 +67,8 @@ public class MegalodonTranslationListener implements PacketListener {
         }
     }
 
-    private Component replaceLangTags(Component component, Player player) {
-        String raw = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(component);
+    private Component replaceLangTags(TextHologram hologram, Component component, Player player) {
+        String raw = hologram.getTranslationScan().of(component);
         if (!raw.contains("<lang:")) return component;
 
         Matcher matcher = LANG_TAG_PATTERN.matcher(raw);
