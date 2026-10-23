@@ -68,7 +68,7 @@ public class MegalodonTranslationListener implements PacketListener {
     }
 
     private Component replaceLangTags(Component component, Player player) {
-        String raw = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(component);
+        String raw = MiniMessage.serialize(component);
         if (!raw.contains("<lang:")) return component;
 
         Matcher matcher = LANG_TAG_PATTERN.matcher(raw);

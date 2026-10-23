@@ -38,7 +38,7 @@ public class PlaceholderAPIHook implements PacketListener {
         for (EntityData<?> data : packet.getEntityMetadata()) {
             if (data.getIndex() == TEXT_DISPLAY_TEXT_INDEX && data.getType() == EntityDataTypes.ADV_COMPONENT) {
                 Component component = (Component) data.getValue();
-                String serialized = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().serialize(component);
+                String serialized = MiniMessage.serialize(component);
                 if (serialized.contains("%")) {
                     String parsed = PlaceholderAPI.setPlaceholders(player, serialized);
                     if (!serialized.equals(parsed)) {
